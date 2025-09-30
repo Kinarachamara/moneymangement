@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily Report with RDB and In-shop Expenses</title>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.25/dist/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f2f2f2;
+      padding: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+    h1 {
+      text-align: center;
+      color: #4a148c;
+    }
+    label, select, button {
+      font-size: 1rem;
+      margin: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #e1bee7;
+    }
+    tbody tr:hover {
+      background-color: #f3e5f5;
+    }
+    .sale {
+      color: green;
+      font-weight: bold;
+    }
+    .expense {
+      color: red;
+      font-weight: bold;
+    }
+    .missing {
+      color: #F57C00;
+      font-weight: bold;
+    }
+    .in-shop\ expenses {
+      color: red;
+      font-weight: bold;
+    }
+    .rdb\ deposit {
+      color: #1565c0;
+      font-weight: bold;
+    }
+    .balance, .monthly {
+      margin-top: 10px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: goldenrod;
+      text-align: center;
+    }
+    /* Loader styles */
+    #loader {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #f7f7f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: #4a148c;
+      font-weight: 700;
+      user-select: none;
+      z-index: 9999;
+      flex-direction: column;
+      gap: 15px;
+    }
+    #loader::after {
+      content: "";
+      width: 48px;
+      height: 48px;
+      border: 6px solid #7B1FA2;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-top: 15px;
+    }
+    @keyframes spin {
+      0%   { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+    /* Monthly summary animations */
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0);}
+      50% { transform: translateY(-5px);}
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1;}
+      50% { transform: scale(1.1); opacity: 0.8;}
+      100% { transform: scale(1); opacity: 1;}
+    }
+    @keyframes spinIcon {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0);}
+      25% { transform: translateX(-2px);}
+      75% { transform: translateX(2px);}
+    }
+    @keyframes glow {
+      0%, 100% { filter: drop-shadow(0 0 0px gold);}
+      50% { filter: drop-shadow(0 0 6px gold);}
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loader">⏳ Loading...</div>
+
+  <h1 style="display:none;">Daily Sales and Expenses Report</h1>
+
+  <label for="day" style="display:none;">Select Date:</label>
+  <select id="day" style="display:none;"></select>
+
+  <button
+    onclick="window.open('https://sites.google.com/view/iduminabagcenter/store', '_blank')"
+    style="
+      margin: 15px 0;
+      padding: 12px 28px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(90deg, #7b1fa2, #4a148c);
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(123, 31, 162, 0.6);
+      transition: background 0.3s ease, transform 0.2s ease;
+    "
+    onmouseover="this.style.background='linear-gradient(90deg, #4a148c, #7b1fa2)'; this.style.transform='scale(1.05)';"
+    onmouseout="this.style.background='linear-gradient(90deg, #7b1fa2, #4a148c)'; this.style.transform='scale(1)';"
+  >
+    GO HOME PAGE
+  </button>
+
+  <button onclick="openFormPopup()" style="
+      margin: 15px 0;
+      padding: 12px 28px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(90deg, #7b1fa2, #4a148c);
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(123, 31, 162, 0.6);
+      transition: background 0.3s ease, transform 0.2s ease;
+    "
+    onmouseover="this.style.background='#fb8c00'; this.style.transform='scale(1.05)';"
+    onmouseout="this.style.background='#ff9800'; this.style.transform='scale(1)';"
+  >
+    Open Form
+  </button>
+
+  <div id="formModal" style="
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+  ">
+    <div style="
+      background-color: white;
+      border-radius: 10px;
+      max-width: 90%;
+      width: 600px;
+      height: 80vh;
+      padding: 10px;
+      position: relative;
+    ">
+      <span onclick="closeFormPopup()" style="
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        font-size: 20px;
+        font-weight: bold;
+        cursor: pointer;
+        color: #c62828;
+      ">&times;</span>
+
+      <iframe src="https://docs.google.com/forms/d/e/1FAIpQLScq-3eK2qEy0mkqPTHxaR8YGWRz_L235EapO0b0JKMEWdCh7w/viewform?embedded=true"
+        width="100%" height="100%" frameborder="0" marginheight="0" marginwidth="0">
+        Loading…
+      </iframe>
+    </div>
+  </div>
+
+  <button onclick="downloadPDF()" style="
+      margin: 15px 0;
+      padding: 12px 28px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(90deg, #7b1fa2, #4a148c);
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(123, 31, 162, 0.6);
+      transition: background 0.3s ease, transform 0.2s ease;
+    ">Download PDF</button>
+
+  <div id="monthlyProfit" class="monthly" style="display:none;"></div>
+
+  <table id="reportTable" aria-label="Transaction Report Table" style="display:none;">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Type</th>
+        <th>Amount (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="balance" class="balance" aria-live="polite" style="display:none;"></div>
+
+<script>
+  // Loader control function
+  function hideLoader() {
+    document.getElementById('loader').style.display = 'none';
+
+    // Show main content
+    document.querySelector('h1').style.display = '';
+    document.querySelector('label[for="day"]').style.display = '';
+    document.getElementById('day').style.display = '';
+    // Show all buttons
+    document.querySelectorAll('button').forEach(b => b.style.display = '');
+    document.getElementById('monthlyProfit').style.display = '';
+    document.getElementById('reportTable').style.display = '';
+    document.getElementById('balance').style.display = '';
+  }
+
+  const data = [];
+
+  // Track loader start time
+  const startTime = Date.now();
+
+  fetch("https://opensheet.elk.sh/1-cCkNBnusup9F4v6EsYiLbPp6YnUFIT46CZhQifq1Hw/ABC")
+    .then(res => res.json())
+    .then(rows => {
+      rows.forEach(row => {
+        const date = row.Date || row.date || '';
+        const description = row.Description || row.description || '';
+        const type = row.Type || row.type || '';
+        const amount = parseFloat(row['Amount (Rs.)'] || row.amount || 0);
+        data.push({ date, description, type, amount });
+      });
+
+      // Calculate elapsed and ensure loader visible at least 3s
+      const elapsed = Date.now() - startTime;
+      const delay = Math.max(0, 3000 - elapsed);
+
+      setTimeout(() => {
+        initialize();
+        hideLoader();
+      }, delay);
+
+    })
+    .catch(err => {
+      console.error("Error loading data:", err);
+      alert('Data load failed.');
+    });
+
+  function initialize() {
+    const select = document.getElementById('day');
+    const tbody = document.querySelector('#reportTable tbody');
+    const balanceDiv = document.getElementById('balance');
+    const monthlyDiv = document.getElementById('monthlyProfit');
+
+    // Sort dates descending so newest is default
+    const uniqueDates = [...new Set(data.map(i => i.date))].sort((a,b) => new Date(b) - new Date(a));
+    uniqueDates.forEach(d => {
+      const option = document.createElement('option');
+      option.value = d;
+      option.textContent = d;
+      select.appendChild(option);
+    });
+
+    if(uniqueDates.length > 0) {
+      select.value = uniqueDates[0];
+    }
+
+    select.addEventListener('change', updateTable);
+    updateTable();
+
+    function updateTable() {
+      tbody.innerHTML = '';
+      const selected = select.value;
+      if (!selected) return;
+
+      const selectedDate = new Date(selected);
+      const [year, month, day] = selected.split("-").map(Number);
+
+      // Filter data based on selected date
+      const filtered = data.filter(i => i.date === selected);
+
+      // Monthly summary (up to selected date)
+      const monthFiltered = data.filter(i => {
+        const d = new Date(i.date);
+        return d.getFullYear() === year && d.getMonth() === month - 1 && d <= selectedDate;
+      });
+
+      const totalIncome = monthFiltered.filter(i => i.type === "Sale").reduce((sum, i) => sum + i.amount, 0);
+      const totalExpense = monthFiltered.filter(i => i.type === "Expenses" || i.type === "In-shop Expenses").reduce((sum, i) => sum + i.amount, 0);
+      const totalMissing = monthFiltered.filter(i => i.type === "Missing").reduce((sum, i) => sum + i.amount, 0);
+      const totalRDB = monthFiltered.filter(i => i.type === "RDB Deposit").reduce((sum, i) => sum + i.amount, 0);
+      // Profit deducting RDB Deposit also
+      const profit = totalIncome - totalExpense - totalMissing - totalRDB;
+
+      monthlyDiv.innerHTML = `
+      <div style="
+        max-width: 500px;
+        margin: 20px auto;
+        background: #fff;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: clamp(14px, 2vw, 16px);
+        color: #444;
+        line-height: 2;
+        text-align: center;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      "
+        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 25px rgba(0,0,0,0.2)'"
+        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 5px 15px rgba(0,0,0,0.15)'"
+      >
+        <div style="
+          background: linear-gradient(to right, #4A148C, #7B1FA2);
+          color: white;
+          padding: 16px;
+          font-size: clamp(16px, 2.2vw, 20px);
+          font-weight: bold;
+          letter-spacing: 0.5px;
+        ">
+          <span style="display:inline-block; animation:bounce 1.2s infinite;">🧾</span>
+          Monthly Summary (up to ${selected})
+        </div>
+        <div style="padding: 20px;">
+          <div><span style="display:inline-block; animation:pulse 2s infinite;">📈</span> <b>අද වෙනකොට මුලු ආදායම:</b> <span style="color:green;">Rs. ${totalIncome.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:spinIcon 3s linear infinite;">📉</span> <b>අද වෙනකොට මුලු වියදම:</b> <span style="color:red;">Rs. ${totalExpense.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:shake 1.5s infinite;">🧨</span> <b>මගඇරුනු සල්ලි:</b> <span style="color:#ff6600;">Rs. ${totalMissing.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:glow 2s ease-in-out infinite;">💰</span> <b>ලාච්චුවේ දැන්:</b> <span style="color:#DAA520;">Rs. ${profit.toFixed(2)}</span></div>
+          <div><span style="display:inline-block;">🏦</span> <b>RDB Deposit:</b> <span style="color:#1565c0;">Rs. ${totalRDB.toFixed(2)}</span></div>
+        </div>
+      </div>
+      `;
+
+      let dayTotal = 0;
+
+      filtered.forEach(i => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${i.description}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.type}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.amount.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+
+        if (i.type === 'Sale') dayTotal += i.amount;
+        else if (i.type === 'Expenses' || i.type === 'In-shop Expenses' || i.type === 'Missing' || i.type === 'RDB Deposit') dayTotal -= i.amount;
+      });
+
+      balanceDiv.innerHTML = `${selected} දවස අවසානයේ මුලු ලාභය: Rs. ${dayTotal.toFixed(2)}`;
+    }
+  }
+
+  function downloadPDF() {
+    const selected = document.getElementById('day').value;
+    if (!selected) return alert('Please select a date.');
+
+    const selectedDate = new Date(selected);
+    const [year, month] = selected.split("-").map(Number);
+
+    const filtered = data.filter(i => i.date === selected);
+    const monthFiltered = data.filter(i => {
+      const d = new Date(i.date);
+      return d.getFullYear() === year && d.getMonth() === month - 1 && d <= selectedDate;
+    });
+
+    const totalIncome = monthFiltered.filter(i => i.type === "Sale").reduce((sum, i) => sum + i.amount, 0);
+    const totalExpense = monthFiltered.filter(i => i.type === "Expenses" || i.type === "In-shop Expenses").reduce((sum, i) => sum + i.amount, 0);
+    const totalMissing = monthFiltered.filter(i => i.type === "Missing").reduce((sum, i) => sum + i.amount, 0);
+    const totalRDB = monthFiltered.filter(i => i.type === "RDB Deposit").reduce((sum, i) => sum + i.amount, 0);
+    const profit = totalIncome - totalExpense - totalMissing - totalRDB;
+
+    const doc = new jsPDF();
+    doc.setFontSize(16).setFont("helvetica", "bold").text(`Date: ${selected}`, 14, 20);
+    doc.setFontSize(12).setFont("helvetica", "normal");
+    doc.text(`Monthly Income: Rs. ${totalIncome.toFixed(2)}`, 14, 30);
+    doc.text(`Monthly Expenses: Rs. ${totalExpense.toFixed(2)}`, 14, 36);
+    doc.text(`Missing: Rs. ${totalMissing.toFixed(2)}`, 14, 42);
+    doc.text(`RDB Deposit: Rs. ${totalRDB.toFixed(2)}`, 14, 48);
+    doc.text(`Net Profit: Rs. ${profit.toFixed(2)}`, 14, 54);
+
+    doc.autoTable({
+      startY: 60,
+      head: [['Description', 'Type', 'Amount (Rs.)']],
+      body: filtered.map(i => [i.description, i.type, i.amount.toFixed(2)]),
+      styles: { fontSize: 10 },
+    });
+
+    doc.save(`DailyReport_${selected}.pdf`);
+  }
+
+  function openFormPopup() {
+    document.getElementById('formModal').style.display = 'flex';
+  }
+  function closeFormPopup() {
+    document.getElementById('formModal').style.display = 'none';
+  }
+</script>
+
+
+<!-- In your <script> block inside the HTML page -->
+<script>
+  function initialize() {
+    const select = document.getElementById('day');
+    const tbody = document.querySelector('#reportTable tbody');
+    const balanceDiv = document.getElementById('balance');
+    const monthlyDiv = document.getElementById('monthlyProfit');
+
+    const uniqueDates = [...new Set(data.map(i => i.date))].sort((a,b) => new Date(b) - new Date(a));
+    uniqueDates.forEach(d => {
+      const option = document.createElement('option');
+      option.value = d;
+      option.textContent = d;
+      select.appendChild(option);
+    });
+
+    if(uniqueDates.length > 0) {
+      select.value = uniqueDates[0];
+    }
+
+    select.addEventListener('change', updateTable);
+    updateTable();
+
+    function updateTable() {
+      tbody.innerHTML = '';
+      const selected = select.value;
+      if (!selected) return;
+
+      const selectedDate = new Date(selected);
+      const [year, month, day] = selected.split("-").map(Number);
+
+      const filtered = data.filter(i => i.date === selected);
+      const monthFiltered = data.filter(i => {
+        const d = new Date(i.date);
+        return d.getFullYear() === year && d.getMonth() === month - 1 && d <= selectedDate;
+      });
+
+      const totalIncome = monthFiltered.filter(i => i.type === "Sale").reduce((sum, i) => sum + i.amount, 0);
+      const totalExpense = monthFiltered.filter(i => i.type === "Expenses").reduce((sum, i) => sum + i.amount, 0);
+      const totalInShop = monthFiltered.filter(i => i.type === "In-shop Expenses").reduce((sum, i) => sum + i.amount, 0);
+      const totalMissing = monthFiltered.filter(i => i.type === "Missing").reduce((sum, i) => sum + i.amount, 0);
+      const totalRDB = monthFiltered.filter(i => i.type === "RDB Deposit").reduce((sum, i) => sum + i.amount, 0);
+
+      const profit = totalIncome - totalExpense - totalInShop - totalMissing - totalRDB;
+
+      monthlyDiv.innerHTML = `
+      <div style="
+        max-width: 500px;
+        margin: 20px auto;
+        background: #fff;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: clamp(14px, 2vw, 16px);
+        color: #444;
+        line-height: 2;
+        text-align: center;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      "
+        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 25px rgba(0,0,0,0.2)'"
+        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 5px 15px rgba(0,0,0,0.15)'"
+      >
+        <div style="
+          background: linear-gradient(to right, #4A148C, #7B1FA2);
+          color: white;
+          padding: 16px;
+          font-size: clamp(16px, 2.2vw, 20px);
+          font-weight: bold;
+          letter-spacing: 0.5px;
+        ">
+          <span style="display:inline-block; animation:bounce 1.2s infinite;">🧾</span>
+          Monthly Summary (up to ${selected})
+        </div>
+        <div style="padding: 20px;">
+          <div><span style="display:inline-block; animation:pulse 2s infinite;">📈</span> <b>අද වෙනකොට මුලු ආදායම:</b> <span style="color:green;">Rs. ${totalIncome.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:spinIcon 3s linear infinite;">📉</span> <b>මුලු වියදම් (Expenses):</b> <span style="color:red;">Rs. ${totalExpense.toFixed(2)}</span></div>
+          <div><span style="display:inline-block;">🛍️</span> <b>In-shop වියදම්:</b> <span style="color:#e53935;">Rs. ${totalInShop.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:shake 1.5s infinite;">🧨</span> <b>මගඇරුනු සල්ලි:</b> <span style="color:#ff6600;">Rs. ${totalMissing.toFixed(2)}</span></div>
+          <div><span style="display:inline-block;">🏦</span> <b>RDB Deposit:</b> <span style="color:#1565c0;">Rs. ${totalRDB.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:glow 2s ease-in-out infinite;">💰</span> <b>ලාභය:</b> <span style="color:#DAA520;">Rs. ${profit.toFixed(2)}</span></div>
+        </div>
+      </div>`;
+
+      let dayTotal = 0;
+
+      filtered.forEach(i => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${i.description}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.type}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.amount.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+
+        if (i.type === 'Sale') dayTotal += i.amount;
+        else if (['Expenses', 'In-shop Expenses', 'Missing', 'RDB Deposit'].includes(i.type)) dayTotal -= i.amount;
+      });
+
+      balanceDiv.innerHTML = `${selected} දින අගය: Rs. ${dayTotal.toFixed(2)}`;
+    }
+  }
+</script>
+<!-- In your <script> block inside the HTML page -->
+<script>
+  function initialize() {
+    const select = document.getElementById('day');
+    const tbody = document.querySelector('#reportTable tbody');
+    const balanceDiv = document.getElementById('balance');
+    const monthlyDiv = document.getElementById('monthlyProfit');
+
+    const uniqueDates = [...new Set(data.map(i => i.date))].sort((a,b) => new Date(b) - new Date(a));
+    uniqueDates.forEach(d => {
+      const option = document.createElement('option');
+      option.value = d;
+      option.textContent = d;
+      select.appendChild(option);
+    });
+
+    if(uniqueDates.length > 0) {
+      select.value = uniqueDates[0];
+    }
+
+    select.addEventListener('change', updateTable);
+    updateTable();
+
+    function updateTable() {
+      tbody.innerHTML = '';
+      const selected = select.value;
+      if (!selected) return;
+
+      const selectedDate = new Date(selected);
+      const [year, month, day] = selected.split("-").map(Number);
+
+      const filtered = data.filter(i => i.date === selected);
+      const monthFiltered = data.filter(i => {
+        const d = new Date(i.date);
+        return d.getFullYear() === year && d.getMonth() === month - 1 && d <= selectedDate;
+      });
+
+      const totalIncome = monthFiltered.filter(i => i.type === "Sale").reduce((sum, i) => sum + i.amount, 0);
+      const totalExpense = monthFiltered.filter(i => i.type === "Expenses").reduce((sum, i) => sum + i.amount, 0);
+      const totalInShop = monthFiltered.filter(i => i.type === "In-shop Expenses").reduce((sum, i) => sum + i.amount, 0);
+      const totalMissing = monthFiltered.filter(i => i.type === "Missing").reduce((sum, i) => sum + i.amount, 0);
+      const totalRDB = monthFiltered.filter(i => i.type === "RDB Deposit").reduce((sum, i) => sum + i.amount, 0);
+
+      const profit = totalIncome - totalExpense - totalInShop - totalMissing - totalRDB;
+
+      monthlyDiv.innerHTML = `
+      <div style="
+        max-width: 500px;
+        margin: 20px auto;
+        background: #fff;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        font-family: 'Segoe UI', sans-serif;
+        font-size: clamp(14px, 2vw, 16px);
+        color: #444;
+        line-height: 2;
+        text-align: center;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      "
+        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 25px rgba(0,0,0,0.2)'"
+        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 5px 15px rgba(0,0,0,0.15)'"
+      >
+        <div style="
+          background: linear-gradient(to right, #4A148C, #7B1FA2);
+          color: white;
+          padding: 16px;
+          font-size: clamp(16px, 2.2vw, 20px);
+          font-weight: bold;
+          letter-spacing: 0.5px;
+        ">
+          <span style="display:inline-block; animation:bounce 1.2s infinite;">🧾</span>
+          Monthly Summary (up to ${selected})
+        </div>
+        <div style="padding: 20px;">
+          <div><span style="display:inline-block; animation:pulse 2s infinite;">📈</span> <b>අද වෙනකොට මුලු ආදායම:</b> <span style="color:green;">Rs. ${totalIncome.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:spinIcon 3s linear infinite;">📉</span> <b>මුලු වියදම් (Expenses):</b> <span style="color:red;">Rs. ${totalExpense.toFixed(2)}</span></div>
+          <div><span style="display:inline-block;">🛍️</span> <b>In-shop වියදම්:</b> <span style="color:#e53935;">Rs. ${totalInShop.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:shake 1.5s infinite;">🧨</span> <b>මගඇරුනු සල්ලි:</b> <span style="color:#ff6600;">Rs. ${totalMissing.toFixed(2)}</span></div>
+          <div><span style="display:inline-block;">🏦</span> <b>RDB Deposit:</b> <span style="color:#1565c0;">Rs. ${totalRDB.toFixed(2)}</span></div>
+          <div><span style="display:inline-block; animation:glow 2s ease-in-out infinite;">💰</span> <b>ලාච්චුවෙ දැන්:</b> <span style="color:#DAA520;">Rs. ${profit.toFixed(2)}</span></div>
+        </div>
+      </div>`;
+
+      let dayTotal = 0;
+
+      filtered.forEach(i => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${i.description}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.type}</td>
+          <td class="${i.type.toLowerCase().replace(/ /g, '\\ ')}">${i.amount.toFixed(2)}</td>
+        `;
+        tbody.appendChild(row);
+
+        if (i.type === 'Sale') dayTotal += i.amount;
+        else if (['Expenses', 'In-shop Expenses', 'Missing', 'RDB Deposit'].includes(i.type)) dayTotal -= i.amount;
+      });
+
+      balanceDiv.innerHTML = `${selected} දින අගය: Rs. ${dayTotal.toFixed(2)}`;
+    }
+  }
+</script>
+
+</body>
+</html>
